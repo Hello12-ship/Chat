@@ -108,7 +108,7 @@ input{flex:1;border-radius:12px;outline:none;padding:10px;}
 
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <script>
-const ably = new Ably.Realtime("KFH2jQ.KSseqA:9U2adiC7ZnNFJ3udjlabtaVDzPEqnRHbKoG7zElCdC8");
+const ably = new Ably.Realtime("KFH2jQ.6gDraw:-edY27j1_UfE8-TrnsJDxCn27Mv4hrB01X1MCgshXHg");
 let channel, room = "";
 let users = {};
 let profile = JSON.parse(localStorage.getItem("chat_profile")) || {};
@@ -197,4 +197,4 @@ function closeUserInfo(){ document.getElementById("userInfo").style.display="non
 function insertEmoji(e){ document.getElementById("text").value+=e; }
 </script>
 </body>
-  </html>
+</html>
