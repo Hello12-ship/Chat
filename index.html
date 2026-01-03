@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WhatsApp-style Chat App</title>
+<title>Chat App Final</title>
 <style>
 body{margin:0;font-family:'Segoe UI',sans-serif;background:#0b141a;color:white;transition:0.3s;}
 .screen{display:none;height:100vh;justify-content:center;align-items:center;flex-direction:column;padding:20px;}
@@ -38,18 +38,10 @@ input{flex:1;border-radius:12px;outline:none;padding:10px;}
 <!-- HOME -->
 <div id="home" class="screen">
   <h2>🌐 Chat App</h2>
-  <div class="card">
-    <button onclick="joinRoom('public')">Public Chat 🌍</button>
-  </div>
-  <div class="card">
-    <button onclick="showGroups()">Groups 👥</button>
-  </div>
-  <div class="card">
-    <button onclick="privateMenu()">Private 🔐</button>
-  </div>
-  <div class="card">
-    <button onclick="openProfile()">⚙️ Profile</button>
-  </div>
+  <div class="card"><button onclick="joinRoom('public')">Public Chat 🌍</button></div>
+  <div class="card"><button onclick="showGroups()">Groups 👥</button></div>
+  <div class="card"><button onclick="privateMenu()">Private 🔐</button></div>
+  <div class="card"><button onclick="openProfile()">⚙️ Profile</button></div>
 </div>
 
 <!-- GROUPS -->
@@ -109,10 +101,14 @@ input{flex:1;border-radius:12px;outline:none;padding:10px;}
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <script>
 const ably = new Ably.Realtime("KFH2jQ.6gDraw:-edY27j1_UfE8-TrnsJDxCn27Mv4hrB01X1MCgshXHg");
-let channel, room = "";
-let users = {};
+let channel, room="", users={}, myId = Math.random().toString(36).slice(2,6);
+
 let profile = JSON.parse(localStorage.getItem("chat_profile")) || {};
-if(!profile.name){ profile.name = prompt("Enter your username") || "Guest"; profile.about=""; profile.pic=""; localStorage.setItem("chat_profile", JSON.stringify(profile)); }
+if(!profile.name){
+  profile.name = prompt("Enter your username") || "Guest";
+  profile.about = ""; profile.pic="";
+  localStorage.setItem("chat_profile", JSON.stringify(profile));
+}
 
 function show(id){ document.querySelectorAll(".screen").forEach(s=>s.style.display="none"); document.getElementById(id).style.display="flex"; }
 show("home");
@@ -121,7 +117,11 @@ function privateMenu(){ show("privateMenu"); }
 function back(){ show("home"); }
 
 // PROFILE
-function openProfile(){ document.getElementById("profileName").value = profile.name; document.getElementById("profileAbout").value = profile.about; document.getElementById("profileModal").style.display="flex"; }
+function openProfile(){
+  document.getElementById("profileName").value = profile.name;
+  document.getElementById("profileAbout").value = profile.about;
+  document.getElementById("profileModal").style.display="flex";
+}
 function closeProfile(){ document.getElementById("profileModal").style.display="none"; }
 function saveProfile(){
   profile.name = document.getElementById("profileName").value || profile.name;
@@ -129,7 +129,21 @@ function saveProfile(){
   const fileInput = document.getElementById("profilePicFile");
   if(fileInput.files && fileInput.files[0]){
     const reader = new FileReader();
-    reader.onload = function(e){ profile.pic = e.target.result; localStorage.setItem("chat_profile", JSON.stringify(profile)); };
+    reader.onload = function(e){
+      // ✅ Compress image to max width 150
+      const img = new Image();
+      img.onload = ()=>{
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(150/img.width,150/img.height,1);
+        canvas.width = img.width*scale;
+        canvas.height = img.height*scale;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        profile.pic = canvas.toDataURL("image/jpeg",0.7);
+        localStorage.setItem("chat_profile", JSON.stringify(profile));
+      }
+      img.src = e.target.result;
+    }
     reader.readAsDataURL(fileInput.files[0]);
   }
   localStorage.setItem("chat_profile", JSON.stringify(profile));
@@ -137,63 +151,77 @@ function saveProfile(){
 }
 
 // PRIVATE ROOMS
-function privateJoinExisting(){ const code = prompt("Enter private room code:"); if(code) joinRoom("private-"+code); }
-function privateCreateRoom(){ const code = prompt("Create new room code:"); if(code) joinRoom("private-"+code); }
+function privateJoinExisting(){ const code=prompt("Enter room code:"); if(code) joinRoom("private-"+code);}
+function privateCreateRoom(){ const code=prompt("Create new room code:"); if(code) joinRoom("private-"+code);}
 
-let myId = Math.random().toString(36).slice(2,6);
-
+// JOIN ROOM
 function joinRoom(r){
   room = r;
-  channel = ably.channels.get(room);
-  users = {};
-  show("chat");
+  ably.connection.once('connected',()=>{
+    channel = ably.channels.get(room);
+    users={};
+    show("chat");
 
-  channel.subscribe(msg=>{
-    if(msg.name==="join") users[msg.data.id]=msg.data.data || msg.data;
-    if(msg.name==="leave") delete users[msg.data.id];
-    if(msg.name==="msg") addMsg(msg);
-    if(msg.name==="typing") showTyping(msg);
-    updateUsers();
+    channel.subscribe(msg=>{
+      if(msg.name==="join") users[msg.data.id] = msg.data;
+      if(msg.name==="leave") delete users[msg.data.id];
+      if(msg.name==="msg") addMsg(msg);
+      if(msg.name==="typing") showTyping(msg);
+      updateUsers();
+    });
+
+    // ✅ Publish join
+    channel.publish("join",{id:myId,...profile},err=>{ if(err) console.error(err); });
   });
-
-  // publish join with correct structure
-  channel.publish("join",{id:myId,data:profile});
 }
 
+// SEND MESSAGE
 function send(){
-  const t=document.getElementById("text").value.trim();
-  if(!t) return;
-  channel.publish("msg",{id:myId,data:{...profile,text:t}});
+  const t = document.getElementById("text").value.trim();
+  if(!t || !channel) return;
+  channel.publish("msg",{id:myId,...profile,text:t},err=>{ if(err) console.error("Publish failed:",err); });
   document.getElementById("text").value="";
   typing(false);
 }
 
+// ADD MESSAGE
 function addMsg(msg){
-  const d=document.createElement("div");
-  const isMe = msg.data.id===myId;
-  d.className="msg "+(isMe?"me":"other");
-  const profileData = msg.data.data || msg.data;
+  const d = document.createElement("div");
+  const isMe = msg.data.id === myId;
+  d.className = "msg "+(isMe?"me":"other");
+
+  const name = msg.data.name || "Guest";
   const text = msg.data.text || "";
-  const img=document.createElement("img");
-  img.src = profileData.pic || "https://via.placeholder.com/36";
-  img.onclick = ()=>showUserInfo(profileData);
-  const bubble=document.createElement("div");
+  const pic = msg.data.pic || "https://via.placeholder.com/36";
+
+  const img = document.createElement("img");
+  img.src = pic;
+  img.onclick = ()=>showUserInfo(msg.data);
+
+  const bubble = document.createElement("div");
   bubble.className="bubble";
-  const displayName = profileData.name.length>15?profileData.name.slice(0,15)+"…":profileData.name;
-  bubble.innerText = displayName+(text?": "+text:"");
-  if(isMe){ d.appendChild(bubble); d.appendChild(img); } else { d.appendChild(img); d.appendChild(bubble); }
+  bubble.innerText = (name.length>15?name.slice(0,15)+"…":name) + (text?": "+text:"");
+
+  if(isMe){ d.appendChild(bubble); d.appendChild(img); }
+  else{ d.appendChild(img); d.appendChild(bubble); }
+
   document.getElementById("messages").appendChild(d);
   d.scrollIntoView({behavior:"smooth"});
 }
 
-function typing(state){ if(channel) channel.publish("typing",{id:myId,data:{...profile,state}}); }
-function showTyping(msg){ document.getElementById("typing").innerText = msg.data.state? msg.data.name+" typing...":""; }
+// TYPING
+function typing(state){ if(channel) channel.publish("typing",{id:myId,name:profile.name,state}); }
+function showTyping(msg){ document.getElementById("typing").innerText = msg.data.state? msg.data.name+" typing..." : ""; }
 
-function updateUsers(){ const names=Object.values(users).map(u=>u.name||u.data?.name); document.getElementById("users").innerText="Online: "+names.join(", "); }
-function leave(){ channel.publish("leave",{id:myId}); channel.unsubscribe(); show("home"); }
+// UPDATE USERS
+function updateUsers(){ const names=Object.values(users).map(u=>u.name); document.getElementById("users").innerText="Online: "+names.join(", "); }
+function leave(){ if(channel){ channel.publish("leave",{id:myId}); channel.unsubscribe(); } show("home"); }
 
-function showUserInfo(user){ document.getElementById("infoPic").src=user.pic||"https://via.placeholder.com/80"; document.getElementById("infoName").innerText=user.name; document.getElementById("infoAbout").innerText=user.about||""; document.getElementById("userInfo").style.display="block"; }
+// USER INFO
+function showUserInfo(u){ document.getElementById("infoPic").src=u.pic||"https://via.placeholder.com/80"; document.getElementById("infoName").innerText=u.name; document.getElementById("infoAbout").innerText=u.about||""; document.getElementById("userInfo").style.display="block"; }
 function closeUserInfo(){ document.getElementById("userInfo").style.display="none"; }
+
+// EMOJI
 function insertEmoji(e){ document.getElementById("text").value+=e; }
 </script>
 </body>
