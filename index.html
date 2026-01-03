@@ -1,228 +1,449 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chat App Final</title>
-<style>
-body{margin:0;font-family:'Segoe UI',sans-serif;background:#0b141a;color:white;transition:0.3s;}
-.screen{display:none;height:100vh;justify-content:center;align-items:center;flex-direction:column;padding:20px;}
-h2,h3{margin-bottom:20px;}
-button,input{padding:12px 16px;font-size:16px;border:none;border-radius:12px;margin:5px;cursor:pointer;}
-button{background:#1f2c38;color:white;transition:0.2s;}
-button:hover{background:#005c4b;}
-input{flex:1;border-radius:12px;outline:none;padding:10px;}
-.card{background:#1f2c38;padding:20px;border-radius:16px;margin:10px;text-align:center;width:240px;box-shadow:0 6px 16px rgba(0,0,0,0.3);}
-#chat{display:flex;flex-direction:column;height:100vh;max-width:600px;margin:auto;background:#0f1b26;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.5);}
-#messages{flex:1;overflow-y:auto;padding:10px;scroll-behavior:smooth;}
-.msg{display:flex;margin:6px 0;max-width:80%;}
-.msg .bubble{padding:10px 14px;border-radius:20px;position:relative;display:inline-block;word-break:break-word;}
-.msg.me{justify-content:flex-end;}
-.msg.me .bubble{background:#005c4b;border-bottom-right-radius:4px;color:white;}
-.msg.other{justify-content:flex-start;}
-.msg.other .bubble{background:#202c33;border-bottom-left-radius:4px;color:white;}
-.msg img{width:36px;height:36px;border-radius:50%;margin:0 8px;cursor:pointer;}
-#inputBar{display:flex;padding:10px;background:#0b141a;align-items:center;}
-#inputBar input{flex:1;margin-right:6px;}
-#typing{font-size:13px;opacity:0.7;margin-left:10px;margin-bottom:4px;}
-#users{font-size:13px;opacity:0.7;margin:5px 10px;}
-#profileModal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;}
-#profileContent{background:#1f2c38;padding:20px;border-radius:16px;text-align:center;width:280px;}
-#profileContent input{margin:8px 0;width:100%;}
-#userInfo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#1f2c38;padding:16px;border-radius:16px;display:none;text-align:center;}
-#userInfo img{width:80px;height:80px;border-radius:50%;margin-bottom:8px;}
-#emojiBtn{background:#1f2c38;color:white;border-radius:50%;font-size:20px;padding:6px 10px;margin-right:6px;}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ably Dark Chat</title>
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --sidebar-bg: #252525;
+            --chat-bg: #121212;
+            --input-bg: #2a2a2a;
+            --primary: #7289da;
+            --primary-hover: #5b6eae;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --my-msg-bg: #7289da;
+            --other-msg-bg: #333333;
+            --border-radius: 12px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        body { background-color: var(--bg-color); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; }
+
+        /* --- Sidebar --- */
+        .sidebar { width: 260px; background: var(--sidebar-bg); display: flex; flex-direction: column; border-right: 1px solid #333; transition: transform 0.3s; z-index: 10; }
+        .sidebar-header { padding: 20px; font-size: 1.2rem; font-weight: bold; color: var(--primary); border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        .sidebar-section { padding: 15px 10px; flex: 1; overflow-y: auto; }
+        .section-title { font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; padding-left: 10px; letter-spacing: 1px; }
+        
+        .room-btn { width: 100%; padding: 12px 15px; background: transparent; border: none; color: var(--text-main); text-align: left; cursor: pointer; border-radius: 8px; margin-bottom: 5px; transition: background 0.2s; display: flex; align-items: center; }
+        .room-btn:hover { background: rgba(255,255,255,0.05); }
+        .room-btn.active { background: rgba(114, 137, 218, 0.2); color: var(--primary); font-weight: 600; border-left: 3px solid var(--primary); }
+        .room-icon { margin-right: 10px; }
+
+        .join-private { margin-top: 10px; padding: 0 10px; }
+        .private-input { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #444; background: #1a1a1a; color: white; margin-bottom: 5px; }
+        .private-btn { width: 100%; padding: 8px; background: #333; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+        .private-btn:hover { background: #444; }
+
+        .online-users { padding: 15px; border-top: 1px solid #333; max-height: 200px; overflow-y: auto; }
+        .user-item { display: flex; align-items: center; padding: 5px 0; font-size: 0.9rem; color: var(--text-muted); }
+        .status-dot { width: 8px; height: 8px; background: #43b581; border-radius: 50%; margin-right: 8px; }
+
+        /* --- Main Chat Area --- */
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--chat-bg); position: relative; }
+        
+        /* Header */
+        .chat-header { padding: 15px 20px; background: var(--sidebar-bg); border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; z-index: 5; }
+        .chat-title { font-weight: bold; font-size: 1.1rem; }
+        .connection-status { font-size: 0.8rem; color: #faa61a; display: flex; align-items: center; }
+        .connection-status.connected { color: #43b581; }
+
+        /* Messages */
+        .messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
+        
+        .message { max-width: 70%; display: flex; flex-direction: column; animation: fadeIn 0.2s ease-out; }
+        .message.mine { align-self: flex-end; align-items: flex-end; }
+        .message.theirs { align-self: flex-start; align-items: flex-start; }
+        
+        .msg-sender { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; margin-left: 4px; }
+        .message.mine .msg-sender { display: none; } /* Hide own name */
+
+        .msg-bubble { padding: 10px 15px; border-radius: var(--border-radius); font-size: 0.95rem; line-height: 1.4; word-wrap: break-word; position: relative; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        .message.mine .msg-bubble { background: var(--my-msg-bg); color: white; border-bottom-right-radius: 2px; }
+        .message.theirs .msg-bubble { background: var(--other-msg-bg); color: var(--text-main); border-bottom-left-radius: 2px; }
+
+        .msg-time { font-size: 0.7rem; opacity: 0.7; text-align: right; margin-top: 4px; display: block; }
+        .message.mine .msg-time { color: rgba(255,255,255,0.8); }
+
+        /* Typing Indicator */
+        .typing-indicator { font-size: 0.8rem; color: var(--text-muted); height: 20px; padding: 0 20px; font-style: italic; display: flex; align-items: center; }
+        .typing-dots span { width: 4px; height: 4px; background: var(--text-muted); display: inline-block; border-radius: 50%; margin: 0 1px; animation: bounce 1.4s infinite ease-in-out both; }
+        .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+        /* Input Area */
+        .input-area { padding: 15px; background: var(--sidebar-bg); display: flex; align-items: center; gap: 10px; border-top: 1px solid #333; position: relative; }
+        .emoji-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); transition: color 0.2s; padding: 5px; }
+        .emoji-btn:hover { color: #ffd700; }
+        
+        .chat-input { flex: 1; background: var(--input-bg); border: 1px solid #444; color: white; padding: 12px 15px; border-radius: 25px; outline: none; transition: border-color 0.2s; }
+        .chat-input:focus { border-color: var(--primary); }
+        
+        .send-btn { background: var(--primary); border: none; color: white; padding: 10px 20px; border-radius: 25px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .send-btn:hover { background: var(--primary-hover); }
+        .send-btn:disabled { background: #444; cursor: not-allowed; }
+
+        /* Emoji Picker */
+        .emoji-picker { position: absolute; bottom: 80px; left: 20px; background: #2f3136; border: 1px solid #202225; border-radius: 8px; padding: 10px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; width: 250px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: none; z-index: 20; }
+        .emoji-picker.show { display: grid; }
+        .emoji-item { font-size: 1.5rem; cursor: pointer; text-align: center; padding: 5px; border-radius: 4px; }
+        .emoji-item:hover { background: rgba(255,255,255,0.1); }
+
+        /* Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(5px); }
+        .modal { background: #2f3136; padding: 30px; border-radius: 12px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .modal h2 { margin-bottom: 20px; color: white; }
+        .modal input { width: 100%; padding: 12px; margin-bottom: 20px; background: #202225; border: 1px solid #444; color: white; border-radius: 6px; font-size: 1rem; }
+        .modal button { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: bold; }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .sidebar { position: absolute; height: 100%; transform: translateX(-100%); width: 80%; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
+            .sidebar.open { transform: translateX(0); }
+            .menu-toggle { display: block; font-size: 1.5rem; cursor: pointer; margin-right: 15px; color: var(--text-main); }
+            .chat-header { padding: 10px 15px; }
+        }
+        @media (min-width: 769px) { .menu-toggle { display: none; } }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+    </style>
 </head>
 <body>
 
-<!-- HOME -->
-<div id="home" class="screen">
-  <h2>🌐 Chat App</h2>
-  <div class="card"><button onclick="joinRoom('public')">Public Chat 🌍</button></div>
-  <div class="card"><button onclick="showGroups()">Groups 👥</button></div>
-  <div class="card"><button onclick="privateMenu()">Private 🔐</button></div>
-  <div class="card"><button onclick="openProfile()">⚙️ Profile</button></div>
-</div>
+    <div id="loginModal" class="modal-overlay">
+        <div class="modal">
+            <h2>Welcome to AblyChat</h2>
+            <p style="color:#aaa; margin-bottom:15px;">Enter a username to join</p>
+            <input type="text" id="usernameInput" placeholder="e.g., CyberNinja" maxlength="15">
+            <button onclick="setUsername()">Start Chatting</button>
+        </div>
+    </div>
 
-<!-- GROUPS -->
-<div id="groups" class="screen">
-  <h3>Choose a Group</h3>
-  <div class="card">
-    <button onclick="joinRoom('group-gaming')">🎮 Gaming</button>
-    <button onclick="joinRoom('group-study')">📚 Study</button>
-    <button onclick="joinRoom('group-general')">💬 General</button>
-  </div>
-  <button onclick="back()">⬅ Back</button>
-</div>
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span>AblyChat</span>
+            <span onclick="toggleSidebar()" style="cursor: pointer; font-size: 1.2rem; display: none;" class="close-sidebar">&times;</span>
+        </div>
+        
+        <div class="sidebar-section">
+            <div class="section-title">Public Rooms</div>
+            <button class="room-btn active" onclick="switchChannel('general', 'General Chat')">
+                <span class="room-icon">#</span> General
+            </button>
+            <button class="room-btn" onclick="switchChannel('gaming', 'Gaming Lounge')">
+                <span class="room-icon">🎮</span> Gaming
+            </button>
+            <button class="room-btn" onclick="switchChannel('study', 'Study Group')">
+                <span class="room-icon">📚</span> Study
+            </button>
 
-<!-- PRIVATE MENU -->
-<div id="privateMenu" class="screen">
-  <h3>Private Room</h3>
-  <div class="card">
-    <button onclick="privateJoinExisting()">Join Existing Room</button>
-    <button onclick="privateCreateRoom()">Create New Room</button>
-  </div>
-  <button onclick="back()">⬅ Back</button>
-</div>
+            <div class="section-title" style="margin-top: 20px;">Join Private Room</div>
+            <div class="join-private">
+                <input type="text" id="roomCodeInput" class="private-input" placeholder="Enter Room Code">
+                <button class="private-btn" onclick="joinPrivateRoom()">Join Room</button>
+            </div>
+        </div>
 
-<!-- CHAT -->
-<div id="chat" class="screen">
-  <div id="users">Online: </div>
-  <div id="messages"></div>
-  <div id="typing"></div>
-  <div id="inputBar">
-    <button id="emojiBtn" onclick="insertEmoji('😊')">😊</button>
-    <input id="text" placeholder="Type a message..." oninput="typing(true)">
-    <button onclick="send()">Send</button>
-    <button onclick="leave()">Leave</button>
-  </div>
-</div>
+        <div class="section-title">Online Users (<span id="userCount">0</span>)</div>
+        <div class="online-users" id="usersList">
+            </div>
+    </div>
 
-<!-- PROFILE MODAL -->
-<div id="profileModal">
-  <div id="profileContent">
-    <h3>Profile Settings</h3>
-    <input type="text" id="profileName" placeholder="Username">
-    <input type="text" id="profileAbout" placeholder="About">
-    <input type="file" id="profilePicFile" accept="image/*">
-    <button onclick="saveProfile()">Save</button>
-    <button onclick="closeProfile()">Cancel</button>
-  </div>
-</div>
+    <div class="chat-area">
+        <div class="chat-header">
+            <div style="display:flex; align-items:center;">
+                <span class="menu-toggle" onclick="toggleSidebar()">☰</span>
+                <span class="chat-title" id="chatTitle"># General Chat</span>
+            </div>
+            <div class="connection-status" id="connectionStatus">● Connecting...</div>
+        </div>
 
-<!-- USER INFO POPUP -->
-<div id="userInfo">
-  <img id="infoPic">
-  <h4 id="infoName"></h4>
-  <p id="infoAbout"></p>
-  <button onclick="closeUserInfo()">Close</button>
-</div>
+        <div class="messages-container" id="messagesContainer">
+            <div style="text-align: center; color: #555; margin-top: 20px; font-size: 0.9rem;">
+                Welcome to the start of the channel.
+            </div>
+        </div>
 
-<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
-<script>
-const ably = new Ably.Realtime("KFH2jQ.6gDraw:-edY27j1_UfE8-TrnsJDxCn27Mv4hrB01X1MCgshXHg");
-let channel, room="", users={}, myId = Math.random().toString(36).slice(2,6);
+        <div class="typing-indicator" id="typingIndicator">
+            </div>
 
-let profile = JSON.parse(localStorage.getItem("chat_profile")) || {};
-if(!profile.name){
-  profile.name = prompt("Enter your username") || "Guest";
-  profile.about = ""; profile.pic="";
-  localStorage.setItem("chat_profile", JSON.stringify(profile));
-}
+        <div class="input-area">
+            <div class="emoji-picker" id="emojiPicker">
+                </div>
+            <button class="emoji-btn" onclick="toggleEmojiPicker()">☺</button>
+            <input type="text" class="chat-input" id="messageInput" placeholder="Type a message..." autocomplete="off">
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+        </div>
+    </div>
 
-function show(id){ document.querySelectorAll(".screen").forEach(s=>s.style.display="none"); document.getElementById(id).style.display="flex"; }
-show("home");
-function showGroups(){ show("groups"); }
-function privateMenu(){ show("privateMenu"); }
-function back(){ show("home"); }
+    <script>
+        // --- CONFIGURATION ---
+        const ABLY_API_KEY = 'PASTE_YOUR_ABLY_API_KEY_HERE'; // <--- REPLACE THIS
+        
+        // --- STATE ---
+        let ably = null;
+        let channel = null;
+        let username = localStorage.getItem('chat_username');
+        let currentChannelName = 'general';
+        let isTyping = false;
+        let typingTimeout = null;
+        const emojiList = ['😀','😂','😍','😎','🤔','👍','👎','🔥','🎉','❤️','😭','😡','👻','🚀'];
 
-// PROFILE
-function openProfile(){
-  document.getElementById("profileName").value = profile.name;
-  document.getElementById("profileAbout").value = profile.about;
-  document.getElementById("profileModal").style.display="flex";
-}
-function closeProfile(){ document.getElementById("profileModal").style.display="none"; }
-function saveProfile(){
-  profile.name = document.getElementById("profileName").value || profile.name;
-  profile.about = document.getElementById("profileAbout").value || "";
-  const fileInput = document.getElementById("profilePicFile");
-  if(fileInput.files && fileInput.files[0]){
-    const reader = new FileReader();
-    reader.onload = function(e){
-      // ✅ Compress image to max width 150
-      const img = new Image();
-      img.onload = ()=>{
-        const canvas = document.createElement("canvas");
-        const scale = Math.min(150/img.width,150/img.height,1);
-        canvas.width = img.width*scale;
-        canvas.height = img.height*scale;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img,0,0,canvas.width,canvas.height);
-        profile.pic = canvas.toDataURL("image/jpeg",0.7);
-        localStorage.setItem("chat_profile", JSON.stringify(profile));
-      }
-      img.src = e.target.result;
-    }
-    reader.readAsDataURL(fileInput.files[0]);
-  }
-  localStorage.setItem("chat_profile", JSON.stringify(profile));
-  closeProfile();
-}
+        // --- DOM ELEMENTS ---
+        const msgContainer = document.getElementById('messagesContainer');
+        const msgInput = document.getElementById('messageInput');
+        const userListEl = document.getElementById('usersList');
+        const countEl = document.getElementById('userCount');
+        const statusEl = document.getElementById('connectionStatus');
+        const titleEl = document.getElementById('chatTitle');
+        const typingEl = document.getElementById('typingIndicator');
 
-// PRIVATE ROOMS
-function privateJoinExisting(){ const code=prompt("Enter room code:"); if(code) joinRoom("private-"+code);}
-function privateCreateRoom(){ const code=prompt("Create new room code:"); if(code) joinRoom("private-"+code);}
+        // --- INITIALIZATION ---
+        window.onload = () => {
+            initEmojiPicker();
+            
+            if (username) {
+                document.getElementById('loginModal').style.display = 'none';
+                initAbly();
+            } else {
+                document.getElementById('usernameInput').focus();
+            }
 
-// JOIN ROOM
-function joinRoom(r){
-  room = r;
-  ably.connection.once('connected',()=>{
-    channel = ably.channels.get(room);
-    users={};
-    show("chat");
+            // Enter key to send
+            msgInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
 
-    channel.subscribe(msg=>{
-      if(msg.name==="join") users[msg.data.id] = msg.data;
-      if(msg.name==="leave") delete users[msg.data.id];
-      if(msg.name==="msg") addMsg(msg);
-      if(msg.name==="typing") showTyping(msg);
-      updateUsers();
-    });
+            // Typing detection
+            msgInput.addEventListener('input', handleTyping);
+            
+            // Close emoji picker on click outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.emoji-picker') && !e.target.closest('.emoji-btn')) {
+                    document.getElementById('emojiPicker').classList.remove('show');
+                }
+            });
+        };
 
-    // ✅ Publish join
-    channel.publish("join",{id:myId,...profile},err=>{ if(err) console.error(err); });
-  });
-}
+        function setUsername() {
+            const val = document.getElementById('usernameInput').value.trim();
+            if (val) {
+                username = val;
+                localStorage.setItem('chat_username', username);
+                document.getElementById('loginModal').style.display = 'none';
+                initAbly();
+            }
+        }
 
-// SEND MESSAGE
-function send(){
-  const t = document.getElementById("text").value.trim();
-  if(!t || !channel) return;
-  channel.publish("msg",{id:myId,...profile,text:t},err=>{ if(err) console.error("Publish failed:",err); });
-  document.getElementById("text").value="";
-  typing(false);
-}
+        function initEmojiPicker() {
+            const picker = document.getElementById('emojiPicker');
+            emojiList.forEach(emoji => {
+                const span = document.createElement('span');
+                span.className = 'emoji-item';
+                span.innerText = emoji;
+                span.onclick = () => {
+                    msgInput.value += emoji;
+                    msgInput.focus();
+                };
+                picker.appendChild(span);
+            });
+        }
 
-// ADD MESSAGE
-function addMsg(msg){
-  const d = document.createElement("div");
-  const isMe = msg.data.id === myId;
-  d.className = "msg "+(isMe?"me":"other");
+        function toggleEmojiPicker() {
+            document.getElementById('emojiPicker').classList.toggle('show');
+        }
 
-  const name = msg.data.name || "Guest";
-  const text = msg.data.text || "";
-  const pic = msg.data.pic || "https://via.placeholder.com/36";
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
 
-  const img = document.createElement("img");
-  img.src = pic;
-  img.onclick = ()=>showUserInfo(msg.data);
+        // --- ABLY LOGIC ---
+        function initAbly() {
+            if (!ABLY_API_KEY || ABLY_API_KEY.includes("KFH2jQ.6gDraw:-edY27j1_UfE8-TrnsJDxCn27Mv4hrB01X1MCgshXHg")) {
+                alert('Please edit the HTML file and insert a valid Ably API Key.');
+                return;
+            }
 
-  const bubble = document.createElement("div");
-  bubble.className="bubble";
-  bubble.innerText = (name.length>15?name.slice(0,15)+"…":name) + (text?": "+text:"");
+            ably = new Ably.Realtime({
+                key: ABLY_API_KEY,
+                clientId: username
+            });
 
-  if(isMe){ d.appendChild(bubble); d.appendChild(img); }
-  else{ d.appendChild(img); d.appendChild(bubble); }
+            ably.connection.on('connected', () => {
+                statusEl.innerText = '● Connected';
+                statusEl.classList.add('connected');
+                subscribeToChannel(currentChannelName);
+            });
 
-  document.getElementById("messages").appendChild(d);
-  d.scrollIntoView({behavior:"smooth"});
-}
+            ably.connection.on('disconnected', () => {
+                statusEl.innerText = '● Disconnected';
+                statusEl.classList.remove('connected');
+            });
+        }
 
-// TYPING
-function typing(state){ if(channel) channel.publish("typing",{id:myId,name:profile.name,state}); }
-function showTyping(msg){ document.getElementById("typing").innerText = msg.data.state? msg.data.name+" typing..." : ""; }
+        function subscribeToChannel(channelName) {
+            // Unsubscribe from previous if exists
+            if (channel) {
+                channel.unsubscribe();
+                channel.presence.leave();
+            }
 
-// UPDATE USERS
-function updateUsers(){ const names=Object.values(users).map(u=>u.name); document.getElementById("users").innerText="Online: "+names.join(", "); }
-function leave(){ if(channel){ channel.publish("leave",{id:myId}); channel.unsubscribe(); } show("home"); }
+            // Clear UI
+            msgContainer.innerHTML = '<div style="text-align: center; color: #555; margin-top: 20px; font-size: 0.9rem;">Joined ' + channelName + '</div>';
+            userListEl.innerHTML = '';
+            
+            // Get channel
+            currentChannelName = channelName;
+            channel = ably.channels.get(channelName);
 
-// USER INFO
-function showUserInfo(u){ document.getElementById("infoPic").src=u.pic||"https://via.placeholder.com/80"; document.getElementById("infoName").innerText=u.name; document.getElementById("infoAbout").innerText=u.about||""; document.getElementById("userInfo").style.display="block"; }
-function closeUserInfo(){ document.getElementById("userInfo").style.display="none"; }
+            // 1. Subscribe to Messages
+            channel.subscribe('message', (message) => {
+                addMessageToUI(message.data, message.clientId === username, message.clientId, message.timestamp);
+            });
 
-// EMOJI
-function insertEmoji(e){ document.getElementById("text").value+=e; }
-</script>
+            // 2. Subscribe to Typing Events
+            channel.subscribe('typing', (msg) => {
+                if (msg.clientId !== username) {
+                    showTypingIndicator(msg.clientId);
+                }
+            });
+
+            // 3. Enter Presence (Online list)
+            channel.presence.enter();
+            channel.presence.subscribe('enter', updateUsers);
+            channel.presence.subscribe('leave', updateUsers);
+            channel.presence.subscribe('present', updateUsers); // Initial list
+            
+            // Refresh list immediately
+            channel.presence.get((err, members) => {
+                if(!err) renderUserList(members);
+            });
+        }
+
+        // --- MESSAGING ---
+        async function sendMessage() {
+            const text = msgInput.value.trim();
+            if (!text || !channel) return;
+
+            if (ably.connection.state !== 'connected') {
+                alert('Connection lost. Please wait...');
+                return;
+            }
+
+            // Publish message
+            await channel.publish('message', text);
+            msgInput.value = '';
+            msgInput.focus();
+        }
+
+        function addMessageToUI(text, isMine, sender, timestamp) {
+            const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${isMine ? 'mine' : 'theirs'}`;
+            
+            msgDiv.innerHTML = `
+                <span class="msg-sender">${sender}</span>
+                <div class="msg-bubble">
+                    ${escapeHtml(text)}
+                    <span class="msg-time">${time}</span>
+                </div>
+            `;
+            
+            msgContainer.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        // --- TYPING INDICATOR ---
+        function handleTyping() {
+            if (!channel) return;
+            // Send typing event max once every 2 seconds
+            if (!isTyping) {
+                isTyping = true;
+                channel.publish('typing', 'true');
+                setTimeout(() => { isTyping = false; }, 2000);
+            }
+        }
+
+        let typingTimer;
+        function showTypingIndicator(user) {
+            typingEl.innerHTML = `${user} is typing <div class="typing-dots"><span></span><span></span><span></span></div>`;
+            typingEl.style.opacity = '1';
+            
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => {
+                typingEl.style.opacity = '0';
+                setTimeout(() => { typingEl.innerHTML = ''; }, 300); // clear text after fade
+            }, 1000);
+        }
+
+        // --- PRESENCE / USER LIST ---
+        function updateUsers() {
+            channel.presence.get((err, members) => {
+                if (!err) renderUserList(members);
+            });
+        }
+
+        function renderUserList(members) {
+            userListEl.innerHTML = '';
+            countEl.innerText = members.length;
+            
+            members.forEach(member => {
+                const div = document.createElement('div');
+                div.className = 'user-item';
+                div.innerHTML = `<span class="status-dot"></span> ${member.clientId} ${member.clientId === username ? '(You)' : ''}`;
+                userListEl.appendChild(div);
+            });
+        }
+
+        // --- NAVIGATION ---
+        function switchChannel(channelCode, displayName) {
+            // UI Toggle
+            document.querySelectorAll('.room-btn').forEach(btn => btn.classList.remove('active'));
+            // Find the button that called this, or based on code. 
+            // Simplified: we just reset active on click in UI, but logically:
+            const btns = document.querySelectorAll('.room-btn');
+            btns.forEach(b => {
+                if(b.innerText.toLowerCase().includes(displayName.split(' ')[0].toLowerCase())) b.classList.add('active');
+            });
+
+            titleEl.innerText = '# ' + displayName;
+            subscribeToChannel(channelCode);
+            
+            // On mobile, close sidebar after select
+            if (window.innerWidth <= 768) toggleSidebar();
+        }
+
+        function joinPrivateRoom() {
+            const code = document.getElementById('roomCodeInput').value.trim();
+            if (!code) return;
+            
+            // Remove active class from sidebar defaults
+            document.querySelectorAll('.room-btn').forEach(btn => btn.classList.remove('active'));
+            
+            titleEl.innerText = '🔒 Room: ' + code;
+            subscribeToChannel('private-' + code);
+            
+             // On mobile, close sidebar after select
+             if (window.innerWidth <= 768) toggleSidebar();
+        }
+
+        // --- UTILS ---
+        function scrollToBottom() {
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.innerText = text;
+            return div.innerHTML;
+        }
+    </script>
 </body>
 </html>
