@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp-style Chat App</title>
+<style>
+/* GENERAL STYLES */
+body {
+  margin:0; font-family:'Segoe UI', sans-serif; background:#0b141a; color:white;
+  transition: background 0.3s, color 0.3s;
+}
+.screen { display:none; height:100vh; justify-content:center; align-items:center; flex-direction:column; padding:20px; }
+h2,h3 { margin-bottom:20px; }
+button,input { padding:12px 16px; font-size:16px; border:none; border-radius:12px; margin:5px; cursor:pointer; }
+button { background:#1f2c38; color:white; transition:0.2s; }
+button:hover { background:#005c4b; }
+input { flex:1; border-radius:12px; outline:none; padding:10px; }
+
+/* CARDS */
+.card { background:#1f2c38; padding:20px; border-radius:16px; margin:10px; text-align:center; width:240px; box-shadow:0 6px 16px rgba(0,0,0,0.3); }
+
+/* CHAT STYLES */
+#chat { display:flex; flex-direction:column; height:100vh; max-width:600px; margin:auto; background:#0f1b26; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.5); }
+#messages { flex:1; overflow-y:auto; padding:10px; }
+.msg { display:flex; margin:6px 0; max-width:80%; }
+.msg .bubble { padding:10px 14px; border-radius:20px; position:relative; display:inline-block; word-break:break-word; }
+.msg.me { justify-content:flex-end; }
+.msg.me .bubble { background:#005c4b; border-bottom-right-radius:4px; color:white; }
+.msg.other { justify-content:flex-start; }
+.msg.other .bubble { background:#202c33; border-bottom-left-radius:4px; color:white; }
+.msg img { width:36px; height:36px; border-radius:50%; margin:0 8px; cursor:pointer; }
+
+/* INPUT BAR */
+#inputBar { display:flex; padding:10px; background:#0b141a; align-items:center; }
+#inputBar input { flex:1; margin-right:6px; }
+#typing { font-size:13px; opacity:0.7; margin-left:10px; margin-bottom:4px; }
+
+/* ONLINE USERS */
+#users { font-size:13px; opacity:0.7; margin:5px 10px; }
+
+/* PROFILE MODAL */
+#profileModal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:none; justify-content:center; align-items:center; }
+#profileContent { background:#1f2c38; padding:20px; border-radius:16px; text-align:center; width:280px; }
+#profileContent input { margin:8px 0; width:100%; }
+
+/* PROFILE VIEW POPUP */
+#userInfo { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:#1f2c38; padding:16px; border-radius:16px; display:none; text-align:center; }
+#userInfo img { width:80px; height:80px; border-radius:50%; margin-bottom:8px; }
+
+/* SCROLL SMOOTH */
+#messages { scroll-behavior:smooth; }
+
+/* EMOJI PICKER BUTTON */
+#emojiBtn { background:#1f2c38; color:white; border-radius:50%; font-size:20px; padding:6px 10px; margin-right:6px; }
+
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<div id="home" class="screen">
+  <h2>🌐 Chat App</h2>
+  <div class="card">
+    <button onclick="joinRoom('public')">Public Chat 🌍</button>
+  </div>
+  <div class="card">
+    <button onclick="showGroups()">Groups 👥</button>
+  </div>
+  <div class="card">
+    <button onclick="privateMenu()">Private 🔐</button>
+  </div>
+  <div class="card">
+    <button onclick="openProfile()">⚙️ Profile</button>
+  </div>
+</div>
+
+<!-- GROUPS -->
+<div id="groups" class="screen">
+  <h3>Choose a Group</h3>
+  <div class="card">
+    <button onclick="joinRoom('group-gaming')">🎮 Gaming</button>
+    <button onclick="joinRoom('group-study')">📚 Study</button>
+    <button onclick="joinRoom('group-general')">💬 General</button>
+  </div>
+  <button onclick="back()">⬅ Back</button>
+</div>
+
+<!-- PRIVATE MENU -->
+<div id="privateMenu" class="screen">
+  <h3>Private Room</h3>
+  <div class="card">
+    <button onclick="privateJoinExisting()">Join Existing Room</button>
+    <button onclick="privateCreateRoom()">Create New Room</button>
+  </div>
+  <button onclick="back()">⬅ Back</button>
+</div>
+
+<!-- CHAT -->
+<div id="chat" class="screen">
+  <div id="users">Online: </div>
+  <div id="messages"></div>
+  <div id="typing"></div>
+  <div id="inputBar">
+    <button id="emojiBtn" onclick="insertEmoji('😊')">😊</button>
+    <input id="text" placeholder="Type a message..." oninput="typing(true)">
+    <button onclick="send()">Send</button>
+    <button onclick="leave()">Leave</button>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div id="profileModal">
+  <div id="profileContent">
+    <h3>Profile Settings</h3>
+    <input type="text" id="profileName" placeholder="Username">
+    <input type="text" id="profileAbout" placeholder="About">
+    <input type="text" id="profilePic" placeholder="Profile Pic URL">
+    <button onclick="saveProfile()">Save</button>
+    <button onclick="closeProfile()">Cancel</button>
+  </div>
+</div>
+
+<!-- USER INFO POPUP -->
+<div id="userInfo">
+  <img id="infoPic">
+  <h4 id="infoName"></h4>
+  <p id="infoAbout"></p>
+  <button onclick="closeUserInfo()">Close</button>
+</div>
+
+<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+<script>
+const ably = new Ably.Realtime("KFH2jQ.KSseqA:9U2adiC7ZnNFJ3udjlabtaVDzPEqnRHbKoG7zElCdC8");
+let channel, room = "";
+let users = {};
+
+// PROFILE / USER STORAGE
+let profile = JSON.parse(localStorage.getItem("chat_profile")) || {};
+if(!profile.name){ profile.name = prompt("Enter your username") || "Guest"; localStorage.setItem("chat_profile", JSON.stringify(profile)); }
+
+function show(id){ document.querySelectorAll(".screen").forEach(s=>s.style.display="none"); document.getElementById(id).style.display="flex"; }
+show("home");
+function showGroups(){ show("groups"); }
+function privateMenu(){ show("privateMenu"); }
+function back(){ show("home"); }
+
+// PROFILE SETTINGS
+function openProfile(){
+  document.getElementById("profileName").value = profile.name || "";
+  document.getElementById("profileAbout").value = profile.about || "";
+  document.getElementById("profilePic").value = profile.pic || "";
+  document.getElementById("profileModal").style.display = "flex";
+}
+function closeProfile(){ document.getElementById("profileModal").style.display="none"; }
+function saveProfile(){
+  profile.name = document.getElementById("profileName").value || profile.name;
+  profile.about = document.getElementById("profileAbout").value || "";
+  profile.pic = document.getElementById("profilePic").value || "";
+  localStorage.setItem("chat_profile", JSON.stringify(profile));
+  closeProfile();
+}
+
+// PRIVATE ROOM FUNCTIONS
+function privateJoinExisting(){
+  const code = prompt("Enter private room code:");
+  if(!code) return;
+  joinRoom("private-"+code);
+}
+function privateCreateRoom(){
+  let code = prompt("Create a new room code (any name):");
+  if(!code) return;
+  joinRoom("private-"+code);
+}
+
+// JOIN ROOM
+let myId = Math.random().toString(36).slice(2,6);
+function joinRoom(r){
+  room = r;
+  channel = ably.channels.get(room);
+  users = {};
+  show("chat");
+
+  channel.subscribe(msg=>{
+    if(msg.name==="join") users[msg.data.id]=msg.data;
+    if(msg.name==="leave") delete users[msg.data.id];
+    if(msg.name==="msg") addMsg(msg);
+    if(msg.name==="typing") showTyping(msg);
+    updateUsers();
+  });
+
+  channel.publish("join",{id:myId,data:profile});
+}
+
+// SEND MESSAGE
+function send(){
+  const t = document.getElementById("text").value.trim();
+  if(!t) return;
+  channel.publish("msg",{id:myId,data:{...profile,text:t}});
+  document.getElementById("text").value="";
+  typing(false);
+}
+
+// ADD MESSAGE
+function addMsg(msg){
+  const d = document.createElement("div");
+  d.className = "msg " + (msg.data.id===myId?"me":"other");
+  
+  // Profile pic
+  const img = document.createElement("img");
+  img.src = msg.data.pic || "https://via.placeholder.com/36";
+  img.onclick = ()=>showUserInfo(msg.data);
+  
+  const bubble = document.createElement("div");
+  bubble.className="bubble";
+  bubble.innerText = msg.data.name+": "+msg.data.text;
+  
+  if(msg.data.id===myId){
+    d.appendChild(bubble);
+    d.appendChild(img);
+  }else{
+    d.appendChild(img);
+    d.appendChild(bubble);
+  }
+  
+  document.getElementById("messages").appendChild(d);
+  d.scrollIntoView({behavior:"smooth"});
+}
+
+// TYPING INDICATOR
+function typing(state){
+  if(channel) channel.publish("typing",{id:myId,data:{...profile,state}});
+}
+function showTyping(msg){
+  document.getElementById("typing").innerText = msg.data.state ? msg.data.name+" typing..." : "";
+}
+
+// UPDATE USERS LIST
+function updateUsers(){
+  const names = Object.values(users).map(u=>u.name||u.data.name);
+  document.getElementById("users").innerText = "Online: "+names.join(", ");
+}
+
+// LEAVE ROOM
+function leave(){
+  channel.publish("leave",{id:myId});
+  channel.unsubscribe();
+  show("home");
+}
+
+// SHOW USER INFO POPUP
+function showUserInfo(user){
+  document.getElementById("infoPic").src = user.pic || "https://via.placeholder.com/80";
+  document.getElementById("infoName").innerText = user.name;
+  document.getElementById("infoAbout").innerText = user.about || "";
+  document.getElementById("userInfo").style.display="block";
+}
+function closeUserInfo(){ document.getElementById("userInfo").style.display="none"; }
+
+// INSERT EMOJI
+function insertEmoji(e){ document.getElementById("text").value += e; }
+</script>
+</body>
+</html>
