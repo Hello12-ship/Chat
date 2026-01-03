@@ -52,7 +52,6 @@ input { flex:1; border-radius:12px; outline:none; padding:10px; }
 
 /* EMOJI PICKER BUTTON */
 #emojiBtn { background:#1f2c38; color:white; border-radius:50%; font-size:20px; padding:6px 10px; margin-right:6px; }
-
 </style>
 </head>
 <body>
@@ -114,7 +113,7 @@ input { flex:1; border-radius:12px; outline:none; padding:10px; }
     <h3>Profile Settings</h3>
     <input type="text" id="profileName" placeholder="Username">
     <input type="text" id="profileAbout" placeholder="About">
-    <input type="text" id="profilePic" placeholder="Profile Pic URL">
+    <input type="file" id="profilePicFile" accept="image/*">
     <button onclick="saveProfile()">Save</button>
     <button onclick="closeProfile()">Cancel</button>
   </div>
@@ -134,9 +133,14 @@ const ably = new Ably.Realtime("KFH2jQ.KSseqA:9U2adiC7ZnNFJ3udjlabtaVDzPEqnRHbKo
 let channel, room = "";
 let users = {};
 
-// PROFILE / USER STORAGE
+// PROFILE STORAGE
 let profile = JSON.parse(localStorage.getItem("chat_profile")) || {};
-if(!profile.name){ profile.name = prompt("Enter your username") || "Guest"; localStorage.setItem("chat_profile", JSON.stringify(profile)); }
+if(!profile.name){ 
+  profile.name = prompt("Enter your username") || "Guest"; 
+  profile.about = ""; 
+  profile.pic = ""; 
+  localStorage.setItem("chat_profile", JSON.stringify(profile)); 
+}
 
 function show(id){ document.querySelectorAll(".screen").forEach(s=>s.style.display="none"); document.getElementById(id).style.display="flex"; }
 show("home");
@@ -148,14 +152,21 @@ function back(){ show("home"); }
 function openProfile(){
   document.getElementById("profileName").value = profile.name || "";
   document.getElementById("profileAbout").value = profile.about || "";
-  document.getElementById("profilePic").value = profile.pic || "";
   document.getElementById("profileModal").style.display = "flex";
 }
 function closeProfile(){ document.getElementById("profileModal").style.display="none"; }
 function saveProfile(){
   profile.name = document.getElementById("profileName").value || profile.name;
   profile.about = document.getElementById("profileAbout").value || "";
-  profile.pic = document.getElementById("profilePic").value || "";
+  const fileInput = document.getElementById("profilePicFile");
+  if(fileInput.files && fileInput.files[0]){
+    const reader = new FileReader();
+    reader.onload = function(e){
+      profile.pic = e.target.result;
+      localStorage.setItem("chat_profile", JSON.stringify(profile));
+    }
+    reader.readAsDataURL(fileInput.files[0]);
+  }
   localStorage.setItem("chat_profile", JSON.stringify(profile));
   closeProfile();
 }
@@ -181,7 +192,7 @@ function joinRoom(r){
   show("chat");
 
   channel.subscribe(msg=>{
-    if(msg.name==="join") users[msg.data.id]=msg.data;
+    if(msg.name==="join") users[msg.data.id]=msg.data.data || msg.data;
     if(msg.name==="leave") delete users[msg.data.id];
     if(msg.name==="msg") addMsg(msg);
     if(msg.name==="typing") showTyping(msg);
@@ -203,25 +214,28 @@ function send(){
 // ADD MESSAGE
 function addMsg(msg){
   const d = document.createElement("div");
-  d.className = "msg " + (msg.data.id===myId?"me":"other");
-  
-  // Profile pic
+  const isMe = msg.data.id===myId;
+  d.className = "msg " + (isMe ? "me" : "other");
+
+  const profileData = msg.data.data || msg.data;
+  const text = msg.data.text || "";
+
   const img = document.createElement("img");
-  img.src = msg.data.pic || "https://via.placeholder.com/36";
-  img.onclick = ()=>showUserInfo(msg.data);
-  
+  img.src = profileData.pic || "https://via.placeholder.com/36";
+  img.onclick = ()=>showUserInfo(profileData);
+
   const bubble = document.createElement("div");
   bubble.className="bubble";
-  bubble.innerText = msg.data.name+": "+msg.data.text;
-  
-  if(msg.data.id===myId){
+  bubble.innerText = profileData.name + (text ? ": " + text : "");
+
+  if(isMe){
     d.appendChild(bubble);
     d.appendChild(img);
   }else{
     d.appendChild(img);
     d.appendChild(bubble);
   }
-  
+
   document.getElementById("messages").appendChild(d);
   d.scrollIntoView({behavior:"smooth"});
 }
@@ -236,7 +250,7 @@ function showTyping(msg){
 
 // UPDATE USERS LIST
 function updateUsers(){
-  const names = Object.values(users).map(u=>u.name||u.data.name);
+  const names = Object.values(users).map(u=>u.name || u.data?.name);
   document.getElementById("users").innerText = "Online: "+names.join(", ");
 }
 
@@ -260,4 +274,4 @@ function closeUserInfo(){ document.getElementById("userInfo").style.display="non
 function insertEmoji(e){ document.getElementById("text").value += e; }
 </script>
 </body>
-</html>
+      </html>
